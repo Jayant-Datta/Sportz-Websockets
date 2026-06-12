@@ -1,15 +1,94 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { wsArcjet } from "../arcjet.js";
 
+const matchSubscribers = new Map();
+
+function subscribe(matchId, socket) {
+    if (!matchSubscribers.has(matchId)) {
+        matchSubscribers.set(matchId, new Set());
+    }
+    
+    matchSubscribers.get(matchId).add(socket);
+}
+
+function unsubscribe(matchId, socket) {
+    const subscribers = matchSubscribers.get(matchId);
+
+    if(!subscribers) return;
+
+    // Remove the specific socket from the Set
+    subscribers.delete(socket);
+
+    // If no one is listening to this match anymore, clear the match key entirely
+    if(subscribers.size === 0) {
+        matchSubscribers.delete(matchId);
+    }
+}
+
+function cleanupSubscriptions(socket) {
+    // Loop through every matchId this specific socket was subscribed to
+    for (const matchId of socket.subscriptions) {
+        unsubscribe(matchId, socket);
+    }
+}
+
+
+
 function sendJson(socket, payload){
     if(socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify(payload));
 }
 
-function broadcast(wss, payload){
+function broadcastToAll(wss, payload){
     for (const client of wss.clients){
         if(client.readyState !== WebSocket.OPEN) continue;
         client.send(JSON.stringify(payload));
+    }
+}
+
+function broadcastToMatch(matchId, payload) {
+    const subscribers = matchSubscribers.get(matchId);
+    
+    // Safety check: if no one is listening, don't bother sending anything
+    if (!subscribers || subscribers.size === 0) return;
+
+    const message = JSON.stringify(payload);
+
+    // Loop through every single active socket connection listening to this match
+    for (const client of subscribers) {
+        // Ensure the connection is still alive before pushing data
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    }
+}
+
+function handleMessage(socket, data) {
+    let message;
+
+    try {
+        // Parse the incoming raw buffer data into a JSON object
+        message = JSON.parse(data.toString());
+    } catch {
+        // If the client sends malformed data, respond with a JSON error
+        sendJson(socket, { type: 'error', message: 'Invalid JSON' });
+        return; // Early return to prevent execution crashes
+    }
+
+    // 1. Handle "subscribe" request type
+    if (message?.type === 'subscribe' && Number.isInteger(message.matchId)) {
+        subscribe(message.matchId, socket);
+        socket.subscriptions.add(message.matchId);
+        sendJson(socket, { type: 'subscribed', matchId: message.matchId });
+        return;
+    }
+
+    // 2. Handle "unsubscribe" request type
+    if (message?.type === 'unsubscribe' && Number.isInteger(message.matchId)) {
+        unsubscribe(message.matchId, socket);
+        socket.subscriptions.delete(message.matchId);
+        sendJson(socket, { type: 'unsubscribed', matchId: message.matchId });
+        return;
     }
 }
 
@@ -54,8 +133,25 @@ export function attachWebSocketServer(server){
     wss.on('connection', (socket, req) => {
         socket.isAlive = true;
         socket.on('pong', () => { socket.isAlive = true; });
+        
+        socket.subscriptions = new Set();
 
         sendJson(socket, { type: 'welcome' });
+
+        socket.on('message', (data) => {
+            handleMessage(socket, data);
+        });
+
+        // Terminate socket cleanly if connection issues pop up
+        socket.on('error', () => {
+            socket.terminate();
+        });
+
+        // Handle connection closure event
+        socket.on('close', () => {
+            cleanupSubscriptions(socket);
+        });
+
         socket.on('error', console.error);
     });
 
@@ -72,8 +168,12 @@ export function attachWebSocketServer(server){
     wss.on('close', () => clearInterval(interval));
 
     function broadcastMatchCreated(match) {
-        broadcast(wss, { type: 'match_created', data: match });
+        broadcastToAll(wss, { type: 'match_created', data: match });
     }
 
-    return { broadcastMatchCreated };
+    function broadcastCommentary(matchId, comment) {
+        broadcastToMatch(matchId, {type: 'commentary' , data: comment} );
+    }
+
+    return { broadcastMatchCreated , broadcastCommentary };
 }
