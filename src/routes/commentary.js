@@ -2,7 +2,7 @@ import { Router } from "express";
 import { matchIdParamSchema } from "../validation/matches.js";
 import { createCommentarySchema, listCommentaryQuerySchema } from "../validation/commentary.js";
 import { db } from "../db/db.js";
-import { commentary } from "../db/schema.js";
+import { commentary, matches } from "../db/schema.js"; // <-- Added matches here
 import { eq, desc } from "drizzle-orm";
 
 const MAX_LIMIT = 100;
@@ -52,14 +52,29 @@ commentaryRouter.post('/', async (req, res) => {
     }
 
     try {
+        const { id: matchId } = paramsResult.data;
+
+        // 1. Verify the match actually exists before inserting
+        const [existingMatch] = await db
+            .select()
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .limit(1);
+
+        if (!existingMatch) {
+            return res.status(404).json({ error: `Match with ID ${matchId} not found.` });
+        }
+
+        // 2. If the match exists, proceed to insert the commentary
         const { minute, ...rest } = bodyResult.data;
         const [result] = await db.insert(commentary).values({
-            matchId: paramsResult.data.id,
+            matchId,
             minute,
             ...rest
         }).returning();
 
-        if(res.app.locals.broadcastCommentary){
+        // 3. Broadcast the update via WebSockets
+        if (res.app.locals.broadcastCommentary) {
             res.app.locals.broadcastCommentary(result.matchId, result);
         }
 
