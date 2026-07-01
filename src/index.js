@@ -1,3 +1,8 @@
+import AgentAPI from 'apminsight';
+AgentAPI.config();
+
+import cors from 'cors';
+
 import express from 'express';
 import http from 'http';
 import { matchRouter } from '../src/routes/matches.js';
@@ -13,6 +18,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 
 // Root GET route
