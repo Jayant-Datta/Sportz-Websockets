@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import MatchCard from './components/MatchCard';
 import CommentaryPanel from './components/CommentaryPanel';
 
-const BACKEND_URL = 'http://localhost:8000';
-const WS_URL = 'ws://localhost:8000/ws';
+const BACKEND_URL = 'https://sportz-websockets-72l5.onrender.com';
+const WS_URL = 'wss://sportz-websockets-72l5.onrender.com/ws';
 
 export default function App() {
   const [matches, setMatches] = useState([]);
