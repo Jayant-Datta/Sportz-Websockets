@@ -58,11 +58,12 @@ export default function App() {
         setCommentaries((prev) => [data.data, ...prev]);
       }
 
-      // If a match is created or score changes via broadcast, refresh our top level scores
-      if (data.type === 'match_created' && data.data) {
+      // If a match is created OR updated via broadcast, refresh our top level scores
+      if ((data.type === 'match_created' || data.type === 'match_updated') && data.data) {
         setMatches((prevMatches) => {
           const matchExists = prevMatches.some((m) => m.id === data.data.id);
           if (matchExists) {
+            // Replace the old match data with the new one containing the updated score
             return prevMatches.map((m) => (m.id === data.data.id ? data.data : m));
           }
           return [data.data, ...prevMatches];

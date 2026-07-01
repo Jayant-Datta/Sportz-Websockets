@@ -171,9 +171,13 @@ export function attachWebSocketServer(server){
         broadcastToAll(wss, { type: 'match_created', data: match });
     }
 
+    function broadcastMatchUpdated(match) {
+        broadcastToAll(wss, { type: 'match_updated', data: match });
+    }
+
     function broadcastCommentary(matchId, comment) {
         broadcastToMatch(matchId, {type: 'commentary' , data: comment} );
     }
 
-    return { broadcastMatchCreated , broadcastCommentary };
+    return { broadcastMatchCreated , broadcastCommentary , broadcastMatchUpdated };
 }

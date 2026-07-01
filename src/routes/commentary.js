@@ -2,7 +2,7 @@ import { Router } from "express";
 import { matchIdParamSchema } from "../validation/matches.js";
 import { createCommentarySchema, listCommentaryQuerySchema } from "../validation/commentary.js";
 import { db } from "../db/db.js";
-import { commentary, matches } from "../db/schema.js"; // <-- Added matches here
+import { commentary, matches } from "../db/schema.js";
 import { eq, desc } from "drizzle-orm";
 
 const MAX_LIMIT = 100;
@@ -73,9 +73,30 @@ commentaryRouter.post('/', async (req, res) => {
             ...rest
         }).returning();
 
-        // 3. Broadcast the update via WebSockets
+        // 3. Broadcast the commentary update via WebSockets
         if (res.app.locals.broadcastCommentary) {
             res.app.locals.broadcastCommentary(result.matchId, result);
+        }
+
+        // 4. DYNAMIC SCORING LOGIC
+        let runsToAdd = 0;
+        const eventType = result.eventType?.toLowerCase();
+        
+        if (eventType === 'run') runsToAdd = 1;
+        if (eventType === 'four') runsToAdd = 4;
+        if (eventType === 'six') runsToAdd = 6;
+
+        if (runsToAdd > 0) {
+            // Update the database with the new score
+            const [updatedMatch] = await db.update(matches)
+                .set({ homeScore: existingMatch.homeScore + runsToAdd })
+                .where(eq(matches.id, matchId))
+                .returning();
+
+            // Blast the new score out to all connected clients!
+            if (res.app.locals.broadcastMatchUpdated) {
+                res.app.locals.broadcastMatchUpdated(updatedMatch);
+            }
         }
 
         res.status(201).json({ data: result });

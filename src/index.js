@@ -30,10 +30,11 @@ app.use(securityMiddleware());
 app.use('/matches', matchRouter);
 app.use('/matches/:id/commentary', commentaryRouter);
 
-const { broadcastMatchCreated ,broadcastCommentary} = attachWebSocketServer(server);
+const { broadcastMatchCreated ,broadcastCommentary , broadcastMatchUpdated} = attachWebSocketServer(server);
 
 app.locals.broadcastMatchCreated = broadcastMatchCreated;
 app.locals.broadcastCommentary = broadcastCommentary;
+app.locals.broadcastMatchUpdated = broadcastMatchUpdated;
 
 // Start server
 server.listen(PORT, HOST, () => {
