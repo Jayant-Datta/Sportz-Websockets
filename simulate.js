@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'https://sportz-websockets-72l5.onrender.com';
 
 // We add a standard browser User-Agent so Arcjet doesn't block us as a bot!
 const headers = {

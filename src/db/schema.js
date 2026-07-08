@@ -15,6 +15,7 @@ export const matchStatusEnum = pgEnum('match_status', ['scheduled', 'live', 'fin
 // Matches table
 export const matches = pgTable('matches', {
   id: serial('id').primaryKey(),
+  apiId: integer('api_id').unique(), // NEW: Tracks the ID from the external Sports API
   sport: varchar('sport', { length: 255 }).notNull(),
   homeTeam: varchar('home_team', { length: 255 }).notNull(),
   awayTeam: varchar('away_team', { length: 255 }).notNull(),
@@ -26,7 +27,7 @@ export const matches = pgTable('matches', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Commentary table
+// Commentary table (Remains exactly the same)
 export const commentary = pgTable('commentary', {
   id: serial('id').primaryKey(),
   matchId: integer('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
@@ -41,4 +42,3 @@ export const commentary = pgTable('commentary', {
   tags: text('tags').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
-
