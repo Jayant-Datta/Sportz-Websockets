@@ -3,9 +3,8 @@ import React, { useState, useEffect } from 'react';
 import MatchCard from './components/MatchCard';
 import CommentaryPanel from './components/CommentaryPanel';
 
-const BACKEND_URL = 'https://sportz-websockets-72l5.onrender.com';
-const WS_URL = 'wss://sportz-websockets-72l5.onrender.com/ws';
-
+ const BACKEND_URL = 'https://sportz-websockets-72l5.onrender.com';
+const WS_URL = 'wss://sportz-websockets-72l5.onrender.com/ws'; 
 
 
 
@@ -115,9 +114,13 @@ export default function App() {
   }, [selectedMatchId]);
 
   return (
-    <div className="min-h-screen bg-[#FDF6E2] text-black font-sans p-6 selection:bg-yellow-300">
+    // 1. Added lg:h-screen and lg:overflow-hidden to prevent full page scroll on desktop
+    // 2. Added flex flex-col so the internal elements can size themselves correctly
+    <div className="min-h-screen lg:h-screen flex flex-col bg-[#FDF6E2] text-black font-sans p-6 selection:bg-yellow-300 lg:overflow-hidden">
+      
       {/* Header */}
-      <header className="bg-[#FFDE4D] border-4 border-black p-4 mb-6 rounded-xl flex justify-between items-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      {/* Added shrink-0 so the header never gets squished when content grows */}
+      <header className="shrink-0 bg-[#FFDE4D] border-4 border-black p-4 mb-6 rounded-xl flex justify-between items-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <div>
           <h1 className="text-3xl font-black uppercase tracking-tight">Sportz</h1>
           <p className="text-sm font-bold opacity-80">Real-time match data</p>
@@ -129,15 +132,18 @@ export default function App() {
       </header>
 
       {/* Main Grid Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Added flex-grow and min-h-0 to take the remaining vertical space */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow min-h-0">
+        
         {/* Left Column: Matches Grid */}
-        <div className="lg:col-span-2">
-          <h2 className="text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+        <div className="lg:col-span-2 flex flex-col min-h-0">
+          <h2 className="shrink-0 text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
             Current Matches
             <span className="bg-black text-white text-xs px-2 py-0.5 rounded font-mono">Count: {matches.length}</span>
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* THE MAGIC IS HERE: overflow-y-auto enables independent scrolling for the matches */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-2 pb-4">
             {matches.map((match) => (
               <MatchCard 
                 key={match.id} 
@@ -147,7 +153,7 @@ export default function App() {
               />
             ))}
             
-            {/* NEW: Interactive Fallback UI when no matches exist */}
+            {/* Interactive Fallback UI */}
             {matches.length === 0 && (
               <div className="col-span-1 md:col-span-2 flex flex-col items-center justify-center p-8 bg-white border-4 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                 <p className="font-bold text-gray-500 mb-4 text-center">
@@ -168,7 +174,8 @@ export default function App() {
         </div>
 
         {/* Right Column: Live Commentary Panel */}
-        <div className="lg:col-span-1">
+        {/* Ensure this column also respects the parent's height constraints */}
+        <div className="lg:col-span-1 flex flex-col min-h-0 h-full">
           <CommentaryPanel commentaries={commentaries} />
         </div>
       </div>

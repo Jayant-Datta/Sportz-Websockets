@@ -36,97 +36,139 @@ app.use('/matches', matchRouter);
 app.use('/matches/:id/commentary', commentaryRouter);
 
 // --- LIVE WORLD CUP SYNC ROUTE (With Bulletproof Team Fallback) ---
+// Add this variable just above your route to prevent overlapping intervals 
+// if the interviewer clicks the button multiple times!
+let activeSimulationInterval = null;
+
+// --- MOCK LIVE WORLD CUP SYNC ROUTE (Bulletproof for Interviews) ---
 app.post('/simulate', async (req, res) => {
   try {
-    console.log('🌍 Fetching Live Data from SportAPI...');
+    console.log('🚀 Starting Local Live Football Simulation (5 Minutes)...');
 
-    const API_KEY = process.env.RAPIDAPI_KEY; 
-    if (!API_KEY) {
-        return res.status(500).json({ error: 'Server configuration error: Missing API Key' });
+    // Clear any existing simulation loop if they click the button twice
+    if (activeSimulationInterval) {
+        clearInterval(activeSimulationInterval);
     }
 
-    const headers = {
-      'x-rapidapi-key': API_KEY,
-      'x-rapidapi-host': 'sportapi7.p.rapidapi.com',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-    };
+    // 1. Define 5 classic football matchups
+    const demoMatchups = [
+        { home: 'Real Madrid', away: 'FC Barcelona' },
+        { home: 'Manchester United', away: 'Liverpool' },
+        { home: 'Bayern Munich', away: 'Borussia Dortmund' },
+        { home: 'AC Milan', away: 'Inter Milan' },
+        { home: 'Paris Saint-Germain', away: 'Marseille' }
+    ];
 
-    // 1. Try to fetch LIVE games first
-    let url = 'https://sportapi7.p.rapidapi.com/api/v1/sport/football/events/live';
-    let response = await axios.get(url, { headers });
-    let gamesList = response.data.events || [];
+    const activeMatches = [];
 
-    // 2. GUARANTEED FALLBACK: If no live games, fetch historical/recent events for Real Madrid (Team ID: 2829)
-    if (gamesList.length === 0) {
-        console.log('ℹ️ No live games. Switching to Real Madrid historical match data fallback...');
-        url = 'https://sportapi7.p.rapidapi.com/api/v1/team/2829/events/last/0'; // Fetch last matches
-        response = await axios.get(url, { headers });
-        gamesList = response.data.events || [];
-    }
-
-    if (gamesList.length === 0) {
-        console.log('ℹ️ Absolute zero games found anywhere.');
-        return res.status(200).json({ message: 'No games available right now.' });
-    }
-
-    // Process the match payload safely
-    const apiMatch = gamesList[0]; 
-    const matchApiId = apiMatch.id;
-
-    // Check if it already exists in our local PostgreSQL DB
-    const [existingMatch] = await db.select().from(matches).where(eq(matches.apiId, matchApiId)).limit(1);
-
-    // Determine clean match status string mapping
-    let matchStatus = 'scheduled';
-    if (apiMatch.status?.type === 'inprogress') matchStatus = 'live';
-    if (apiMatch.status?.type === 'finished') matchStatus = 'finished';
-
-    if (!existingMatch) {
-        console.log(`🆕 Importing game: ${apiMatch.homeTeam?.name} vs ${apiMatch.awayTeam?.name} (${matchStatus})`);
-        
+    // 2. Insert these matches into your database as "LIVE"
+    for (const match of demoMatchups) {
         const [newMatch] = await db.insert(matches).values({
-            apiId: matchApiId,
             sport: 'FOOTBALL',
-            homeTeam: apiMatch.homeTeam?.name || 'Home Team',
-            awayTeam: apiMatch.awayTeam?.name || 'Away Team',
-            startTime: apiMatch.startTimestamp ? new Date(apiMatch.startTimestamp * 1000) : new Date(),
-            endTime: apiMatch.startTimestamp ? new Date((apiMatch.startTimestamp * 1000) + 7200000) : new Date(), 
-            homeScore: apiMatch.homeScore?.current ?? 0,
-            awayScore: apiMatch.awayScore?.current ?? 0,
-            status: matchStatus
+            homeTeam: match.home,
+            awayTeam: match.away,
+            startTime: new Date(),
+            endTime: new Date(Date.now() + 90 * 60000), // Ends in 90 mins
+            homeScore: 0,
+            awayScore: 0,
+            status: 'live' 
+            // Note: Omitted apiId so it defaults to null, avoiding unique constraint errors
         }).returning();
 
+        activeMatches.push(newMatch);
+
+        // Instantly push the new match to the frontend via WebSockets
         if (app.locals.broadcastMatchCreated) {
             app.locals.broadcastMatchCreated(newMatch);
         }
-        res.status(200).json({ message: 'Match loaded into dashboard!', matchId: newMatch.id });
-    } else {
-        console.log(`🔄 Syncing existing data for: ${existingMatch.homeTeam} vs ${existingMatch.awayTeam}`);
-        
-        const latestHomeScore = apiMatch.homeScore?.current ?? 0;
-        const latestAwayScore = apiMatch.awayScore?.current ?? 0;
-
-        if (existingMatch.homeScore !== latestHomeScore || existingMatch.awayScore !== latestAwayScore || existingMatch.status !== matchStatus) {
-            const [updatedMatch] = await db.update(matches)
-                .set({ 
-                    homeScore: latestHomeScore, 
-                    awayScore: latestAwayScore,
-                    status: matchStatus
-                })
-                .where(eq(matches.id, existingMatch.id))
-                .returning();
-
-            if (app.locals.broadcastMatchUpdated) {
-                app.locals.broadcastMatchUpdated(updatedMatch);
-            }
-        }
-        res.status(200).json({ message: 'Match synced seamlessly!', matchId: existingMatch.id });
     }
+
+    res.status(200).json({ message: 'Live simulation started! Generating data for 5 minutes.' });
+
+    // 3. Start the 5-Minute Background WebSocket Loop
+    let elapsedSeconds = 0;
+    const MAX_DURATION = 300; // 5 minutes in seconds
+
+    activeSimulationInterval = setInterval(async () => {
+        elapsedSeconds += 5; // The loop runs every 5 seconds
+
+        // Stop the simulation automatically after 5 minutes
+        if (elapsedSeconds > MAX_DURATION) {
+            clearInterval(activeSimulationInterval);
+            console.log('🏁 5-Minute Demo Simulation Finished.');
+            return;
+        }
+
+        // Pick a random match from our 5 generated games
+        const randomMatch = activeMatches[Math.floor(Math.random() * activeMatches.length)];
+        
+        // Randomize the event (10% chance of a goal every 5 seconds)
+        const isGoal = Math.random() > 0.90; 
+        const isHome = Math.random() > 0.5;
+        const teamName = isHome ? randomMatch.homeTeam : randomMatch.awayTeam;
+        const minute = Math.floor(elapsedSeconds / 60) + 1;
+
+        let eventType = 'possession';
+        let message = `${teamName} is keeping possession well in the midfield.`;
+        
+        if (isGoal) {
+            eventType = 'goal';
+            message = `GOALLLL! Brilliant strike by ${teamName}! What a phenomenal finish!`;
+        } else if (Math.random() > 0.6) {
+            eventType = 'shot';
+            message = `Great shot by ${teamName}, but the keeper makes a fantastic save.`;
+        } else if (Math.random() > 0.8) {
+            eventType = 'foul';
+            message = `Heavy tackle by ${teamName}. The referee blows for a free kick.`;
+        }
+
+        try {
+            // 4. Save the new commentary to the database
+            const [newCommentary] = await db.insert(commentary).values({
+                matchId: randomMatch.id,
+                minute: minute,
+                sequence: Math.floor(Math.random() * 1000), // Required by your schema
+                period: '1st Half',
+                eventType: eventType,
+                team: teamName,
+                message: message,
+            }).returning();
+
+            // 5. Broadcast the commentary to the specific match channel
+            if (app.locals.broadcastCommentary) {
+                app.locals.broadcastCommentary(randomMatch.id, newCommentary);
+            }
+
+            // 6. If it's a goal, update the database scores and broadcast the match update
+            if (isGoal) {
+                const newHomeScore = isHome ? randomMatch.homeScore + 1 : randomMatch.homeScore;
+                const newAwayScore = !isHome ? randomMatch.awayScore + 1 : randomMatch.awayScore;
+                
+                // Update our local tracking object
+                randomMatch.homeScore = newHomeScore;
+                randomMatch.awayScore = newAwayScore;
+
+                const [updatedMatch] = await db.update(matches)
+                    .set({ homeScore: newHomeScore, awayScore: newAwayScore })
+                    .where(eq(matches.id, randomMatch.id))
+                    .returning();
+                
+                // Blast the new score globally to all clients
+                if (app.locals.broadcastMatchUpdated) {
+                    app.locals.broadcastMatchUpdated(updatedMatch);
+                }
+            }
+
+        } catch (err) {
+            console.error("Simulation tick error:", err.message);
+        }
+
+    }, 5000); // interval fires every 5,000 ms (5 seconds)
 
   } catch (error) {
     console.error('❌ Sync Error:', error.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to sync live data' });
+      res.status(500).json({ error: 'Failed to start demo simulation' });
     }
   }
 });
